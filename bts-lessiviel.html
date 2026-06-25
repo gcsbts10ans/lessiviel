@@ -57,6 +57,11 @@
   .card.suivi .scnt{display:flex; gap:8px; margin-top:auto; padding-top:12px; flex-wrap:wrap;}
   .card.suivi .b{font-size:13px; font-weight:700; border-radius:20px; padding:3px 11px; background:rgba(255,255,255,.18);}
   .card.suivi .open{display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:13px; color:#CFE0F5; margin-top:8px;}
+  .card.defaut{background:linear-gradient(160deg,#D97706,#B45309); border:none; color:#fff; align-items:center; justify-content:center; text-align:center; gap:10px;}
+  .card.defaut:active{transform:scale(.99);}
+  .card.defaut svg{width:34px; height:34px;}
+  .card.defaut .dt{font-size:16px; font-weight:700;}
+  .card.defaut .ds{font-size:12px; color:#FCE7CC; margin-top:2px;}
   .sheet{background:var(--bg); border-radius:20px; padding:8px 18px 22px; width:100%; max-width:520px; max-height:86vh; overflow-y:auto;}
   .sheet h2{font-size:21px; margin:8px 4px 2px;}
   .sheet .hsub{color:var(--muted); font-size:14px; margin:0 4px 12px;}
@@ -133,9 +138,17 @@
   .version{font-size:12px; color:rgba(255,255,255,.55); cursor:pointer; user-select:none;}
 
   /* VEILLE */
-  #veille{position:fixed; inset:0; z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+  #veille{position:fixed; inset:0; z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px; overflow:hidden;
     background:linear-gradient(160deg,#EAF1FA,#F4F6F9); color:var(--blue); cursor:pointer; opacity:0; transition:opacity .4s;}
   #veille.show{display:flex; opacity:1;}
+  #veille .vbox{display:flex; flex-direction:column; align-items:center; gap:8px; animation:vdrift 60s ease-in-out infinite; will-change:transform;}
+  @keyframes vdrift{
+    0%   { transform: translate(-6vw,-4vh); }
+    25%  { transform: translate(6vw,-4vh); }
+    50%  { transform: translate(6vw,4vh); }
+    75%  { transform: translate(-6vw,4vh); }
+    100% { transform: translate(-6vw,-4vh); }
+  }
   #veille .vdrop{width:54px; height:64px; margin-bottom:8px;}
   #veille .vclock{font-size:84px; font-weight:700; line-height:1;}
   #veille .vdate{font-size:20px; color:var(--muted); text-transform:capitalize;}
@@ -190,7 +203,6 @@
 
 <div class="hintbar">
   <span class="hint">Touche le produit que tu viens d'utiliser ou de réceptionner en livraison.</span>
-  <button class="btn-defaut" onclick="openDefaut()"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 L19 18 L1 18 Z" fill="#D97706"/><rect x="9" y="7" width="2" height="6" rx="1" fill="#fff"/><circle cx="10" cy="15" r="1.2" fill="#fff"/></svg> Signaler un défaut</button>
 </div>
 <div id="grid"></div>
 
@@ -297,10 +309,12 @@
 
 <!-- ÉCRAN DE VEILLE -->
 <div id="veille" onclick="wake()">
-  <svg class="vdrop" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 1 C18 9 17 16 12 16 C7 16 6 9 12 1 Z M12 12 C16 18 15 27 12 27 C9 27 8 18 12 12 Z" fill="#1E5FAD"/></svg>
-  <div class="vclock" id="vClock">--:--</div>
-  <div class="vdate" id="vDate"></div>
-  <div class="vhint" id="vHint">Touchez pour saisir</div>
+  <div class="vbox">
+    <svg class="vdrop" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 1 C18 9 17 16 12 16 C7 16 6 9 12 1 Z M12 12 C16 18 15 27 12 27 C9 27 8 18 12 12 Z" fill="#1E5FAD"/></svg>
+    <div class="vclock" id="vClock">--:--</div>
+    <div class="vdate" id="vDate"></div>
+    <div class="vhint" id="vHint">Touchez pour saisir</div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -465,6 +479,14 @@ function render(){
     '<div class="scnt"><span class="b">'+nbEnCours+' en cours</span><span class="b">'+nbAttente+' en attente</span></div>'+
     '<div class="open">Ouvrir &rsaquo;</div>';
   g.appendChild(sc);
+  // tuile signaler un défaut — dernière place
+  var dc = document.createElement("div");
+  dc.className = "card defaut";
+  dc.onclick = openDefaut;
+  dc.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
+    '<div><div class="dt">Signaler un défaut</div><div class="ds">Livraison, contenant…</div></div>';
+  g.appendChild(dc);
   renderBanner();
 }
 var bannerMessages = [], bannerIdx = 0;
