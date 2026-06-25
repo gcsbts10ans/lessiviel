@@ -1,8 +1,8 @@
 {
   "name": "Suivi lessiviel — GCS BTS",
   "short_name": "Lessiviel",
-  "start_url": ".",
-  "scope": ".",
+  "start_url": "bts-lessiviel.html",
+  "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#F3F4F6",
