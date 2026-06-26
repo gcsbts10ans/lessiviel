@@ -102,8 +102,9 @@
   .card.prod{display:grid; grid-template-rows:auto 1fr 18px auto; row-gap:6px; cursor:default; justify-content:initial;}
   .card.prod .top{align-items:flex-start;}
   .card.prod .nom{min-height:2.44em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
-  .card.prod .stockwrap{display:flex; align-items:center; justify-content:center; min-height:0;}
+  .card.prod .stockwrap{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:0;}
   .card.prod .stock{font-variant-numeric:tabular-nums; letter-spacing:-.02em; text-align:center;}
+  .card.prod .seuil{font-size:12px; font-weight:600; color:#94A3B8;}
   .card.prod .fourn{display:flex; align-items:center; justify-content:center; gap:5px; max-width:100%; font-size:11px; font-weight:600; color:#7A879B; overflow:hidden;}
   .card.prod .fourn svg{width:12px; height:12px; flex:none; opacity:.7;}
   .card.prod .fourn .fn{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -112,7 +113,9 @@
   .card.prod .moins{background:#F1F4F8; color:var(--body);}
   .card.prod .plus{background:var(--blue); color:#fff;}
   .card.prod.ok .stock{color:var(--green);}   .card.prod.ok .sdot{background:var(--green);}
-  .card.prod.rup .stock{color:#fff;}           .card.prod.rup .sdot{background:#fff;}
+  .card.prod.mini{border-color:#F59E0B; box-shadow:0 0 0 1px #F59E0B inset; background:#FFFBEB;}
+  .card.prod.mini .stock{color:#B45309;}       .card.prod.mini .sdot{background:#D97706;}   .card.prod.mini .seuil{color:#B45309;}
+  .card.prod.rup .stock{color:#fff;}           .card.prod.rup .sdot{background:#fff;}        .card.prod.rup .seuil{color:rgba(255,255,255,.85);}
   @keyframes rupBlink{0%,100%{background:#DC2626; box-shadow:0 6px 16px rgba(220,38,38,.30);} 50%{background:#B91C1C; box-shadow:0 0 0 5px rgba(220,38,38,.45);}}
   .card.prod.rup{background:var(--red); border-color:#B91C1C; animation:rupBlink 1.1s ease-in-out infinite;}
   @media (prefers-reduced-motion:reduce){ .card.prod.rup{animation:none;} }
@@ -465,9 +468,9 @@ function ecouterFournisseurs(){
 /* ===== Statut ===== */
 function statut(p){
   var s = (p.stock_gcs != null) ? p.stock_gcs : 0;
-  var mini = (p.seuil_mini != null) ? p.seuil_mini : 1;
+  var mini = p.seuil_mini;
   if(s <= 0) return "rupture";
-  if(s <= mini) return "mini";
+  if(mini != null && mini > 0 && s <= mini) return "mini";
   return "ok";
 }
 
@@ -481,7 +484,7 @@ function render(){
     return;
   }
   produits.forEach(function(p){
-    var st = statut(p), cls = (st==="rupture")?"rup":"ok", s = (p.stock_gcs!=null)?p.stock_gcs:0;
+    var st = statut(p), cls = (st==="rupture")?"rup":st, s = (p.stock_gcs!=null)?p.stock_gcs:0;
     var fnom = (p.fournisseur_id && fournById[p.fournisseur_id]) ? fournById[p.fournisseur_id] : "";
     var fHtml = (p.stock_fourn!=null && fnom)
       ? ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h12v11H1z"/><path d="M13 8h4l4 4v3h-8z"/><circle cx="6" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg><span class="fn">'+esc(fnom)+'</span><b>'+p.stock_fourn+'</b>')
@@ -490,7 +493,7 @@ function render(){
     c.className = "card prod " + cls;
     c.innerHTML =
       '<div class="top"><div class="nom">'+esc(p.nom)+'</div><span class="sdot"></span></div>'+
-      '<div class="stockwrap"><div class="stock">'+s+'</div></div>'+
+      '<div class="stockwrap"><div class="stock">'+s+'</div><div class="seuil">'+((p.seuil_mini!=null && p.seuil_mini>0)?('mini '+p.seuil_mini):'à 0')+'</div></div>'+
       '<div class="fourn">'+fHtml+'</div>'+
       '<div class="actions">'+
         '<button class="rond moins" onclick="demandeMvt(\''+p.id+'\',-1)">−</button>'+
