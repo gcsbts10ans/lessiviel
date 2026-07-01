@@ -777,8 +777,26 @@ function appliquer(p, delta, type){
     ts: firebase.firestore.FieldValue.serverTimestamp(), device: DEVICE
   });
   pending++; refreshConn();
-  batch.commit().then(function(){ pending=Math.max(0,pending-1); refreshConn(); })
+  batch.commit().then(function(){
+    pending=Math.max(0,pending-1); refreshConn();
+    if(type === "entree"){ cloturerCommandesProduit(p.id); }
+  })
                 .catch(function(e){ pending=Math.max(0,pending-1); refreshConn(); console.error("commit:", e); });
+}
+
+/* ===== Réception : clôture les commandes actives du produit (sortent de la supervision) ===== */
+function cloturerCommandesProduit(pid){
+  db.collection("lessiviel_commandes")
+    .where("statut","in",["en_cours","demande_fournisseur","accepte_fournisseur"])
+    .get().then(function(snap){
+      var b = db.batch(), n = 0;
+      snap.forEach(function(d){
+        var c = d.data();
+        var concerne = (c.produit_id === pid) || (c.lignes && c.lignes.some && c.lignes.some(function(l){ return l && l.produit_id === pid; }));
+        if(concerne){ b.update(d.ref, { statut:"recue", date_reception:firebase.firestore.FieldValue.serverTimestamp() }); n++; }
+      });
+      if(n) b.commit().catch(function(e){ console.error("cloture cmd:", e); });
+    }).catch(function(e){ console.error("cloture query:", e); });
 }
 
 /* ===== Toast ===== */
