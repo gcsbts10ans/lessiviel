@@ -1165,14 +1165,21 @@ function invSynthese(){
 function invValider(){
   var key = todayKey();
   var items = invItems.map(function(it,i){ return { produit_id:it.id, nom:it.nom, sys:it.sys, compte:invCompte[i], ecart:invCompte[i]-it.sys }; });
-  var payload = { date:key, jour:new Date().getDay(), device:DEVICE, applique:false, items:items, at:firebase.firestore.FieldValue.serverTimestamp() };
+  var payload = { date:key, jour:new Date().getDay(), device:DEVICE, applique:true, applique_par:DEVICE, applique_at:firebase.firestore.FieldValue.serverTimestamp(), items:items, at:firebase.firestore.FieldValue.serverTimestamp() };
+  var batch = db.batch();
+  batch.set(db.collection("lessiviel_inventaires").doc(key), payload);
+  items.forEach(function(it){
+    if(it.ecart === 0) return;
+    batch.update(db.collection("lessiviel_produits").doc(it.produit_id), { stock_gcs: it.compte });
+    batch.set(db.collection("lessiviel_mouvements").doc(), { produit_id:it.produit_id, nom:it.nom, type:"correction", qte:it.ecart, motif:"inventaire", ts:firebase.firestore.FieldValue.serverTimestamp(), device:DEVICE });
+  });
   document.getElementById("ifMain").innerHTML =
     '<div class="if-card"><div class="if-bigic">'+ICON_CHECK+'</div>'+
     '<div class="if-title">Inventaire validé</div>'+
-    '<div class="if-text">Le comptage est enregistré. Les écarts seront proposés en mise à jour côté administration.</div>'+
+    '<div class="if-text">Le comptage est enregistré et les stocks ont été mis à jour.</div>'+
     '<button class="if-start" onclick="invClose()">Terminer</button></div>';
   say("Inventaire validé. Merci.");
-  db.collection("lessiviel_inventaires").doc(key).set(payload).then(function(){}).catch(function(e){ console.warn("inv save:", e && e.code); toast("Erreur d'enregistrement"); });
+  batch.commit().then(function(){}).catch(function(e){ console.warn("inv save:", e && e.code); toast("Erreur d'enregistrement"); });
 }
 
 refreshConn();
