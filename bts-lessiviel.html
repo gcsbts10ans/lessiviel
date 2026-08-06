@@ -140,6 +140,10 @@
   .rond:active{transform:scale(.95);}
   .rond .ic{width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.22); display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; line-height:1;}
   .moins{background:var(--red);}
+  /* Stock a zero : retirer n'a plus de sens, le bouton est neutralise. */
+  .rond.off{background:#E8ECF2; color:#B6BFCB; cursor:default;}
+  .rond.off:active{transform:none;}
+  .card.prod.rup .rond.off{background:rgba(255,255,255,.10); color:rgba(255,255,255,.45);}
   .plus{background:var(--green);}
   .micon{width:64px; height:64px; border-radius:50%; margin:0 auto 14px; display:flex; align-items:center; justify-content:center; font-size:40px; font-weight:700; color:#fff;}
   .btn:active{filter:brightness(.95);}
@@ -670,7 +674,7 @@ function render(){
       '<div class="stockwrap"><div class="stock">'+s+'</div><div class="seuil">'+((p.seuil_mini!=null && p.seuil_mini>0)?('mini '+p.seuil_mini):'à 0')+'</div></div>'+
       '<div class="fourn">'+fHtml+'</div>'+
       '<div class="actions">'+
-        '<button class="rond moins" onclick="demandeMvt(\''+p.id+'\',-1)">−</button>'+
+        '<button class="rond moins'+(s<=0?' off':'')+'"'+(s<=0?' disabled':'')+' onclick="demandeMvt(\''+p.id+'\',-1)">−</button>'+
         '<button class="rond plus" onclick="demandeMvt(\''+p.id+'\',1)">+</button>'+
       '</div>';
     g.appendChild(c);
@@ -744,6 +748,14 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function demandeMvt(id, delta){
   current = produits.find(function(p){ return p.id===id; });
   if(!current) return;
+  /* Filet de securite : le stock ne peut pas descendre sous zero, meme si le
+     bouton a ete atteint autrement (double frappe, donnee arrivee entre-temps). */
+  var stockActuel = (current.stock_gcs != null) ? current.stock_gcs : 0;
+  if(delta < 0 && stockActuel <= 0){
+    toast("Stock deja a zero : rien a retirer");
+    current = null;
+    return;
+  }
   pendingDelta = delta;
   var ajout = delta > 0;
   document.getElementById("cIcon").textContent = ajout ? "+" : "−";
@@ -775,6 +787,12 @@ function retourConfirm(){
 function validerFinal(){
   if(!current) return;
   var p = current, d = pendingDelta;
+  var stockActuel = (p.stock_gcs != null) ? p.stock_gcs : 0;
+  if(d < 0 && stockActuel <= 0){
+    toast("Stock deja a zero : rien a retirer");
+    fermerConfirm();
+    return;
+  }
   appliquer(p, d, d > 0 ? "entree" : "sortie");
   toast((d > 0 ? "Ajouté : " : "Retiré : ") + p.nom);
   fermerConfirm();
@@ -891,7 +909,7 @@ function doSeed(){
       cree_le: firebase.firestore.FieldValue.serverTimestamp()
     });
   });
-  batch.commit().then(function(){ toast("13 produits initialisés"); closeAdmin(); })
+  batch.commit().then(function(){ toast(SEED.length + " produits initialisés"); closeAdmin(); })
                 .catch(function(e){ toast("Erreur init"); console.error(e); });
 }
 
