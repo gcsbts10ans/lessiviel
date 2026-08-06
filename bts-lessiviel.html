@@ -827,7 +827,17 @@ function cloturerCommandesProduit(pid){
       snap.forEach(function(d){
         var c = d.data();
         var concerne = (c.produit_id === pid) || (c.lignes && c.lignes.some && c.lignes.some(function(l){ return l && l.produit_id === pid; }));
-        if(concerne){ b.update(d.ref, { statut:"recue", date_reception:firebase.firestore.FieldValue.serverTimestamp() }); n++; }
+        if(concerne){
+          b.update(d.ref, {
+            statut:"recue",
+            date_reception:firebase.firestore.FieldValue.serverTimestamp(),
+            date_cloture:firebase.firestore.FieldValue.serverTimestamp(),
+            cloture_motif:"livraison_tablette",
+            cloture_par:DEVICE,
+            cloture_detail:"Livraison saisie dans le local lessiviel"
+          });
+          n++;
+        }
       });
       if(n) b.commit().catch(function(e){ console.error("cloture cmd:", e); });
     }).catch(function(e){ console.error("cloture query:", e); });
