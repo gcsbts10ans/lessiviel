@@ -610,9 +610,15 @@ function retryFb(){
     .catch(function(e){ console.warn("retry KO:", e && e.code); });
 }
 
+/* References de desabonnement : une ecoute est toujours purgee avant d'etre
+   recreee, pour qu'un appel repete n'empile jamais deux listeners. */
+var prodUnsub = null, cmdUnsub = null, fournUnsub = null;
+
 /* ===== Lecture produits (temps réel) ===== */
 function ecouterProduits(){
-  db.collection("lessiviel_produits").orderBy("ordre").onSnapshot({ includeMetadataChanges:true }, function(snap){
+  if(prodUnsub) prodUnsub();
+  prodUnsub = null;
+  prodUnsub = db.collection("lessiviel_produits").orderBy("ordre").limit(100).onSnapshot({ includeMetadataChanges:true }, function(snap){
     markFb(!snap.metadata.fromCache);
     produits = [];
     snap.forEach(function(d){ var o = d.data(); o.id = d.id; produits.push(o); });
@@ -623,7 +629,9 @@ function ecouterProduits(){
 
 /* ===== Lecture commandes (temps réel) ===== */
 function ecouterCommandes(){
-  db.collection("lessiviel_commandes").where("statut","in",["en_cours","demande_fournisseur","accepte_fournisseur"]).onSnapshot(function(snap){
+  if(cmdUnsub) cmdUnsub();
+  cmdUnsub = null;
+  cmdUnsub = db.collection("lessiviel_commandes").where("statut","in",["en_cours","demande_fournisseur","accepte_fournisseur"]).onSnapshot(function(snap){
     cmdEnCours = {};
     snap.forEach(function(d){
       var c = d.data(); c.id = d.id;
@@ -636,7 +644,9 @@ function ecouterCommandes(){
 
 /* ===== Lecture fournisseurs (pour afficher le nom) ===== */
 function ecouterFournisseurs(){
-  db.collection("lessiviel_fournisseurs").onSnapshot(function(snap){
+  if(fournUnsub) fournUnsub();
+  fournUnsub = null;
+  fournUnsub = db.collection("lessiviel_fournisseurs").limit(50).onSnapshot(function(snap){
     fournById = {};
     snap.forEach(function(d){ var f = d.data(); fournById[d.id] = f.nom || ""; });
     render();
@@ -701,7 +711,6 @@ function render(){
   renderBanner();
 }
 var bannerMessages = [], bannerIdx = 0;
-function bTri(clr){ return '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 L19 18 L1 18 Z" fill="'+clr+'"/><rect x="9" y="7" width="2" height="6" rx="1" fill="#fff"/><circle cx="10" cy="15" r="1.2" fill="#fff"/></svg>'; }
 function renderBanner(){
   bannerMessages = [];
   showBanner();
@@ -1020,12 +1029,22 @@ function enterFullscreen(){
   }
 }
 if(!matchMedia("(display-mode: fullscreen)").matches && !matchMedia("(display-mode: standalone)").matches){
-  document.addEventListener("pointerdown", function fsOnce(){ enterFullscreen(); }, { once:true });
+  document.addEventListener("pointerdown", function(){ enterFullscreen(); }, { once:true });
 }
 
 /* ===== Module Inventaire ===== */
 var invFait = false, jourInv = false, invDayKey = "", invUnsub = null;
 var invItems = [], invCompte = [], invIdx = -1, invSndOn = true;
+
+/* Contenants vides comptes le vendredi uniquement. Au-dela du seuil, un
+   courriel part a Agnes pour organiser l'enlevement. */
+var CONTENANTS = [
+  { id:"bidons_blancs", nom:"Bidons blancs vides", seuil:48 },
+  { id:"ibc_1000",      nom:"IBC de 1000 litres vides", seuil:4 },
+  { id:"futs_200",      nom:"Fûts de 200 litres vides", seuil:8 }
+];
+var invCont = [], invContIdx = -1;
+function jourContenants(){ return new Date().getDay() === 5; }
 
 function todayKey(){ var d = new Date(); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function isJourInv(){ var j = new Date().getDay(); return (j===1 || j===5); }
@@ -1128,7 +1147,8 @@ function startInv(){
   if(!produits.length){ toast("Aucun produit à inventorier"); return; }
   invItems = produits.map(function(p){ return { id:p.id, nom:p.nom, sys:(p.stock_gcs!=null?p.stock_gcs:0) }; });
   invCompte = invItems.map(function(it){ return it.sys; });
-  invIdx = -1;
+  invCont = CONTENANTS.map(function(){ return 0; });
+  invIdx = -1; invContIdx = -1;
   if(veilleOn) wake();
   document.getElementById("invFlow").classList.add("on");
   invIntro();
@@ -1149,9 +1169,14 @@ function invIntro(){
 }
 function invGo(i){
   invIdx = i;
-  if(i >= invItems.length) return invSynthese();
+  if(i >= invItems.length){
+    /* Le vendredi, le comptage se poursuit par les contenants vides. */
+    if(jourContenants()) return invContGo(0);
+    return invSynthese();
+  }
   var it = invItems[i], dernier = (i === invItems.length-1);
-  invBar(Math.round((i/invItems.length)*100));
+  var total = invItems.length + (jourContenants() ? CONTENANTS.length : 0);
+  invBar(Math.round((i/total)*100));
   document.getElementById("ifMain").innerHTML =
     '<div class="if-step">Produit '+(i+1)+' / '+invItems.length+'</div>'+
     '<div class="if-name">'+esc(it.nom)+'</div>'+
@@ -1162,7 +1187,7 @@ function invGo(i){
     '<button class="if-cbtn" onclick="invAdj(1)">+</button></div>'+
     '<div class="if-delta" id="ifDelta"></div>'+
     '<div class="if-nav"><button class="prev" '+(i===0?'disabled':'')+' onclick="invGo('+(i-1)+')">Précédent</button>'+
-    '<button class="next" onclick="invGo('+(i+1)+')">'+(dernier?'Terminer':'Suivant')+'</button></div>';
+    '<button class="next" onclick="invGo('+(i+1)+')">'+((dernier && !jourContenants())?'Terminer':'Suivant')+'</button></div>';
   invMajDelta();
   say("Produit "+(i+1)+" sur "+invItems.length+". "+it.nom+". Stock enregistré : "+it.sys+(it.sys>1?" unités":" unité")+". Confirmez ou corrigez.");
 }
@@ -1174,12 +1199,57 @@ function invMajDelta(){
   else if(d > 0){ el.className = "if-delta up"; el.textContent = "+"+d+" par rapport au système"; }
   else { el.className = "if-delta down"; el.textContent = d+" par rapport au système"; }
 }
+/* Comptage des contenants vides (vendredi). Meme presentation que les produits :
+   le seuil remplace le stock enregistre, et l'ecran previent des qu'il est atteint. */
+function invContGo(i){
+  if(i < 0) return invGo(invItems.length - 1);
+  if(i >= CONTENANTS.length) return invSynthese();
+  invContIdx = i;
+  var c = CONTENANTS[i], dernier = (i === CONTENANTS.length - 1);
+  var total = invItems.length + CONTENANTS.length;
+  invBar(Math.round(((invItems.length + i) / total) * 100));
+  document.getElementById("ifMain").innerHTML =
+    '<div class="if-step">Contenants vides — '+(i+1)+' / '+CONTENANTS.length+'</div>'+
+    '<div class="if-name">'+esc(c.nom)+'</div>'+
+    '<div class="if-psub">Comptez les contenants vides en attente d\'enlèvement</div>'+
+    '<div class="if-sys"><span>Enlèvement demandé à partir de</span><b>'+c.seuil+'</b></div>'+
+    '<div class="if-counter"><button class="if-cbtn" onclick="invContAdj(-1)">−</button>'+
+    '<div class="if-cval" id="ifCVal">'+invCont[i]+'</div>'+
+    '<button class="if-cbtn" onclick="invContAdj(1)">+</button></div>'+
+    '<div class="if-delta" id="ifCAlert"></div>'+
+    '<div class="if-nav"><button class="prev" onclick="invContGo('+(i-1)+')">Précédent</button>'+
+    '<button class="next" onclick="invContGo('+(i+1)+')">'+(dernier?'Terminer':'Suivant')+'</button></div>';
+  invContMaj();
+  say(c.nom + ". Comptez les contenants vides.");
+}
+function invContAdj(d){
+  invCont[invContIdx] = Math.max(0, invCont[invContIdx] + d);
+  document.getElementById("ifCVal").textContent = invCont[invContIdx];
+  invContMaj();
+}
+function invContMaj(){
+  var c = CONTENANTS[invContIdx], v = invCont[invContIdx];
+  var el = document.getElementById("ifCAlert");
+  if(!el) return;
+  if(v >= c.seuil){ el.textContent = "Seuil atteint — Agnès sera prévenue"; el.className = "if-delta down"; }
+  else { el.textContent = ""; el.className = "if-delta"; }
+}
+
 function invSynthese(){
   invBar(100);
   var rows = invItems.map(function(it,i){
     var d = invCompte[i]-it.sys, cls = d===0?"eq":(d>0?"up":"down"), txt = d===0?"=":(d>0?("+"+d):(""+d));
     return '<div class="if-srow"><span class="nm">'+esc(it.nom)+'</span><span class="vv">'+it.sys+' → '+invCompte[i]+'</span><span class="ec '+cls+'">'+txt+'</span></div>';
   }).join("");
+  if(jourContenants()){
+    rows += CONTENANTS.map(function(c,i){
+      var dep = invCont[i] >= c.seuil;
+      return '<div class="if-srow"><span class="nm">'+esc(c.nom)+'</span>'
+           + '<span class="vv">'+invCont[i]+'</span>'
+           + '<span class="ec '+(dep?'down':'eq')+'" style="width:96px;font-size:13px;">'
+           + (dep ? 'à enlever' : '—') + '</span></div>';
+    }).join("");
+  }
   var ec = invItems.filter(function(it,i){ return invCompte[i]!==it.sys; }).length;
   document.getElementById("ifMain").innerHTML =
     '<div class="if-card">'+
@@ -1194,6 +1264,13 @@ function invValider(){
   var key = todayKey();
   var items = invItems.map(function(it,i){ return { produit_id:it.id, nom:it.nom, sys:it.sys, compte:invCompte[i], ecart:invCompte[i]-it.sys }; });
   var payload = { date:key, jour:new Date().getDay(), device:DEVICE, applique:true, applique_par:DEVICE, applique_at:firebase.firestore.FieldValue.serverTimestamp(), items:items, at:firebase.firestore.FieldValue.serverTimestamp() };
+  if(jourContenants()){
+    /* Le script lit ce tableau pour prevenir Agnes des contenants a enlever. */
+    payload.contenants = CONTENANTS.map(function(c,i){
+      return { id:c.id, nom:c.nom, qte:invCont[i], seuil:c.seuil, depasse:(invCont[i] >= c.seuil) };
+    });
+    payload.contenants_traite = false;
+  }
   var batch = db.batch();
   batch.set(db.collection("lessiviel_inventaires").doc(key), payload);
   items.forEach(function(it){
